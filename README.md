@@ -1,6 +1,12 @@
 # style-transfer-pytorch
 
+THIS IS A MODIFIED VERSION OF THE [style-transfer-pytorch](https://github.com/crowsonkb/style-transfer-pytorch/tree/master)
+
+
+
+## Original readme
 An implementation of neural style transfer ([A Neural Algorithm of Artistic Style](https://arxiv.org/abs/1508.06576)) in PyTorch, supporting CPUs and Nvidia GPUs. It does automatic multi-scale (coarse-to-fine) stylization to produce high-quality high resolution stylizations, even up to print resolution if the GPUs have sufficient memory. If two GPUs are available, they can both be used to increase the maximum resolution. (Using two GPUs is not faster than using one.)
+
 
 The algorithm has been modified from that in the literature by:
 
