@@ -129,21 +129,6 @@ class ContentLossMSE(nn.Module):
     def forward(self, input):
         return self.loss(input, self.target)
 
-# class ContentLossMSE(nn.Module):
-#     def __init__(self, target, mask):
-#         super().__init__()
-#         self.register_buffer('target', target)
-#         self.register_buffer('mask', mask)
-#         self.loss = nn.MSELoss()
-
-#     def forward(self, input):
-#         masked_input = input * self.mask
-#         masked_target = self.target * self.mask
-#         # 计算masked区域的损失
-#         loss = self.loss(masked_input, masked_target)
-#         # 归一化损失，除以mask中的激活像素数量
-#         return loss / self.mask.sum()
-
 
 
 # Style Loss  - we didnt use it
@@ -170,10 +155,11 @@ class OTStyleLoss(nn.Module):
         self.register_buffer('target', target)
 #         self.loss = ScaledMSELoss(eps=eps)
         self.target_features = target
+        self.eps = eps
 
     
     def project_sort(self, x, proj):
-       # print("Original dimensions in project_sort: ", x.shape, proj.shape)
+
         _, c, h, w = x.shape
         x_flat = x.view(-1, c, h * w)  
 
@@ -184,24 +170,21 @@ class OTStyleLoss(nn.Module):
     def ot_loss(self, source, target, proj_n=32):
         #print("Source features shape: ", source.shape)  # ([1, 64, 94, 128])
         #print("Target features shape: ", target.shape)  # ([1, 64, 80, 128])
-
         _, c, h, w = source.shape
-        ch, n = c, h * w  # Channels and number of spatial elements
-        #print("Channels (ch) and flattened spatial dimensions (n): ", ch, n)
+        ch, n = c, h * w  
+
 
         projs = F.normalize(torch.randn(c, proj_n, device=source.device), dim=0)
-        #print("projs shape", projs.shape)
-        source_proj = self.project_sort(source, projs)
-        #print("source_proj shape", source_proj.shape)
-        target_proj = self.project_sort(target, projs)
-        #print("target_proj shape", target_proj.shape)
 
-        #print("n ", n )
+        source_proj = self.project_sort(source, projs)
+
+        target_proj = self.project_sort(target, projs)
+
+
         target_interp = F.interpolate(target_proj, size=(n,), mode='nearest')
 
-        #print("target_interp",target_interp.shape)
-        loss = (source_proj - target_interp).square().sum()
-        return loss
+        loss = (source_proj - target_interp).square().sum() 
+        return loss / (source_proj - target_interp).abs().sum().add(self.eps)
 
 
 
@@ -487,7 +470,7 @@ class StyleTransfer:
 
     def stylize(self, content_image, style_images, mask, *,
                 style_weights=None,
-                content_weight: float =35000, # 0.015
+                content_weight: float =0.35, # 0.015
                 tv_weight: float = 2.,
                 optimizer: str = 'adam',
                 min_scale: int = 128,
@@ -547,8 +530,6 @@ class StyleTransfer:
         else:
             raise ValueError("init must be one of 'content', 'gray', 'uniform', 'style_mean'")
         
-        # FIXME
-        # self.image *= self.mask 
         self.image = self.image.to(self.devices[0])
         self.mask = self.mask.to(self.devices[0])
         
@@ -567,10 +548,8 @@ class StyleTransfer:
 
             current_mask = TF.to_tensor(mask.resize((cw, ch), Image.BICUBIC))[None]
             current_mask = current_mask.to(self.devices[0])
-            inverse_mask = 1 - current_mask
-            
+
             self.image = interpolate(self.image.detach(), (ch, cw), mode='bicubic').clamp(0, 1)
-            # self.mask = interpolate(self.mask.detach(), (ch, cw), mode='bicubic').clamp(0, 1)
             
             
             self.average = EMA(self.image, avg_decay)
@@ -592,19 +571,8 @@ class StyleTransfer:
                 target = content[layer]
                 print("target shape", target.shape, "current_mask shape", current_mask.shape)
                 content_losses.append(Scale(LayerApply(ContentLossMSE(target), layer), weight))
-                # content_losses.append(Scale(LayerApply(ContentLossMSE(target, current_mask), layer), weight))
 
-            
-            
-            
-            
-            # unmasked_content = self.model(unmasked_content, layers=self.content_layers)
-            # unmaskedpart_reconstruct_losses = []
-            # for layer, weight in zip(self.content_layers, content_weights):
-            #     target = unmasked_content[layer]
-            #     print("target shape", target.shape, "current_mask shape", current_mask.shape)
-            #     unmaskedpart_reconstruct_losses.append(Scale(LayerApply(ContentLossMSE(target), layer), weight + 0.2))
-            
+
             # style loss - W2
             # style_targets, style_losses = {}, []
             # for i, image in enumerate(style_images):
@@ -637,6 +605,9 @@ class StyleTransfer:
             #     target = style_targets[layer]
             #     style_losses.append(Scale(LayerApply(StyleLossW2(target), layer), weight))
 
+
+
+
             # # original style loss
             # style_targets, style_losses = {}, []
             # for i, image in enumerate(style_images):
@@ -660,6 +631,7 @@ class StyleTransfer:
             #     style_losses.append(LayerApply(StyleLoss(target), layer))
             
             
+            
             # OT loss - this is not working 
             style_targets, style_losses = {}, []
             for i, image in enumerate(style_images):
@@ -675,12 +647,6 @@ class StyleTransfer:
                 print("self.style_layers", self.style_layers) # self.style_layers [1, 6, 11, 20, 29]
                 for layer in self.style_layers:
                     target = style_feats[layer]
-                    # print("layer target shape", target.shape)
-                    # layer target shape torch.Size([1, 64, 80, 128])
-                    # layer target shape torch.Size([1, 128, 40, 64])
-                    # layer target shape torch.Size([1, 256, 20, 32])
-                    # layer target shape torch.Size([1, 512, 10, 16])
-                    # layer target shape torch.Size([1, 512, 5, 8])
                     if layer not in style_targets:
                         style_targets[layer] = target
                     else:
@@ -688,18 +654,14 @@ class StyleTransfer:
             #print(style_targets) 
             for layer in self.style_layers:
                 target = style_targets[layer] # target fest
-                # print("OT target shape", target.shape) # OT target shape torch.Size([1, 64, 80, 128])
-                # print(OTStyleLoss(target))
+
                 style_losses.append(LayerApply(OTStyleLoss(target), layer))
             
                 
                 
-            # smooth loss
-            
-            #smooth_weight = 0.5
-            #smoothness_loss = SmoothnessLoss(self.mask, weight=smooth_weight)
+
         
-            #crit = SumLoss([*content_losses, *style_losses, tv_loss, smoothness_loss])
+
             crit = SumLoss([*content_losses, *style_losses, tv_loss])
             # crit = SumLoss([*content_losses, tv_loss])
 
@@ -723,7 +685,7 @@ class StyleTransfer:
                 loss = crit(feats)
                 loss.backward()
                 # with torch.no_grad():
-                #     self.image.grad *= current_mask  # 仅更新mask区域?
+                #     self.image.grad *= current_mask  # only update masked region?
                 return loss
 
             actual_its = initial_iterations if scale == scales[0] else iterations
