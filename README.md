@@ -1,6 +1,6 @@
 # style-transfer-pytorch
 
-THIS IS A MODIFIED VERSION OF THE [style-transfer-pytorch](https://github.com/crowsonkb/style-transfer-pytorch/tree/master)
+THIS IS A MODIFIED VERSION OF THE [style-transfer-pytorch](https://github.com/crowsonkb/style-transfer-pytorch/tree/master). We introduced a new optimal transport loss and a masked seamless clone style transfer method.
 
 
 
