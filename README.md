@@ -2,7 +2,7 @@
 
 The code is based on the [style-transfer-pytorch](https://github.com/crowsonkb/style-transfer-pytorch/tree/master), supporting masked image style transfer.
 
-We also deployed a new **Optimal Transport Loss**, and a masked seamless clone-style transfer method.
+We also deployed the [**Optimal Transport Loss**](https://aclanthology.org/2022.naacl-main.182.pdf), and a masked seamless clone-style transfer method.
 
 Also, support using a user **word prompt** to mask the given image automatically.
 
